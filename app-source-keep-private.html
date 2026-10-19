@@ -1,0 +1,963 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+</head>
+<body>
+<title>ACP Payment Run</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: ledger desk — left column = the three inputs in order, right column = the run's result (or the rulebook at rest) */
+:root{
+  --paper:#F3F5F8; --sheet:#FFFFFF; --ink:#141C2E; --muted:#5B6578; --rule:#DCE1EA;
+  --navy:#1F3864; --navy-ink:#FFFFFF; --focus:#3D6BC4;
+  --ok:#1E7B46; --ok-bg:#E3F3E9; --warn-bg:#FFF6D6; --bad:#B42318; --bad-bg:#FDECEA;
+  --sw-green:#C6EFCE; --sw-yellow:#FFFF00; --sw-lyellow:#FFF2CC; --sw-lblue:#DDEBF7; --sw-blue:#BDD7EE;
+  --sw-red:#FFC7CE; --sw-dup:#FF9999; --sw-orange:#FFC000; --sw-grey:#D9D9D9;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Arial,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
+  --r:8px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#0F1420; --sheet:#171E2D; --ink:#E6EAF2; --muted:#9AA4B8; --rule:#2A3346;
+  --navy:#7EA2E6; --navy-ink:#0F1420; --focus:#9DB9F0;
+  --ok:#6FCF97; --ok-bg:#16301F; --warn-bg:#3A3215; --bad:#F08A80; --bad-bg:#3A1C1A; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#0F1420; --sheet:#171E2D; --ink:#E6EAF2; --muted:#9AA4B8; --rule:#2A3346;
+  --navy:#7EA2E6; --navy-ink:#0F1420; --focus:#9DB9F0;
+  --ok:#6FCF97; --ok-bg:#16301F; --warn-bg:#3A3215; --bad:#F08A80; --bad-bg:#3A1C1A; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;padding-inline:16px;padding-block:28px 48px}
+.wrap{max-width:1180px;margin:0 auto;display:grid;gap:24px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;border-bottom:2px solid var(--navy);padding-bottom:14px}
+h1{font-size:30px;line-height:1.1;margin:0;font-weight:700;letter-spacing:-.01em;text-wrap:balance}
+.sub{margin:4px 0 0;color:var(--muted)}
+.private{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.private::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--ok)}
+.cols{display:grid;grid-template-columns:minmax(0,380px) minmax(0,1fr);gap:24px;align-items:start}
+@media (max-width:860px){.cols{grid-template-columns:minmax(0,1fr)}}
+.steps{display:grid;gap:16px}
+.panel{background:var(--sheet);border:1px solid var(--rule);border-radius:var(--r);padding:18px;display:grid;gap:12px;min-width:0}
+.panel h2{margin:0;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600;display:flex;gap:10px;align-items:center}
+.panel h2 .n{font-family:var(--mono);color:var(--navy);font-weight:500}
+.drop{border:1.5px dashed var(--rule);border-radius:var(--r);padding:18px;text-align:center;cursor:pointer;display:grid;gap:6px;transition:border-color .15s,background .15s}
+.drop:hover,.drop.over{border-color:var(--navy);background:color-mix(in srgb,var(--navy) 6%,transparent)}
+.drop:focus-within{outline:2px solid var(--focus);outline-offset:2px}
+.drop strong{font-weight:600}
+.drop small{color:var(--muted)}
+.drop input{position:absolute;opacity:0;width:1px;height:1px}
+.file{display:flex;justify-content:space-between;gap:10px;font-size:14px;padding:10px 12px;border-radius:6px;background:var(--ok-bg);color:var(--ink);min-width:0}
+.file span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file span:last-child{font-family:var(--mono);white-space:nowrap}
+label.field{display:grid;gap:4px;font-size:14px}
+input[type=date]{font:inherit;padding:8px 10px;border:1px solid var(--rule);border-radius:6px;background:var(--sheet);color:var(--ink);max-width:220px}
+.hint{font-size:13px;color:var(--muted);margin:0}
+.hint b{font-family:var(--mono);font-weight:500;color:var(--ink)}
+.companies{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.co{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--rule);border-radius:6px;cursor:pointer;font-size:14px}
+.co:has(input:checked){border-color:var(--navy);background:color-mix(in srgb,var(--navy) 8%,transparent)}
+.co input{width:16px;height:16px;accent-color:var(--navy);margin:0}
+.co b{font-family:var(--mono);font-weight:500}
+.co span{margin-left:auto;color:var(--muted);font-family:var(--mono);font-size:12px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button{font:inherit;cursor:pointer;border-radius:6px}
+.link{background:none;border:1px solid var(--rule);color:var(--ink);padding:4px 10px;font-size:13px}
+.link:hover{border-color:var(--navy)}
+.primary{background:var(--navy);color:var(--navy-ink);border:0;padding:12px 18px;font-weight:600;font-size:15px;width:100%}
+.primary:disabled{opacity:.45;cursor:not-allowed}
+.primary:not(:disabled):hover{filter:brightness(1.1)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.msg{font-size:14px;padding:10px 12px;border-radius:6px;margin:0}
+.msg.err{background:var(--bad-bg);color:var(--bad)}
+.msg.info{background:var(--warn-bg);color:var(--ink)}
+.empty{color:var(--muted);font-size:14px;margin:0}
+/* right column */
+.right{min-width:0}
+.result{display:grid;gap:16px;min-width:0}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+.kpi{background:var(--sheet);border:1px solid var(--rule);border-radius:var(--r);padding:14px 16px}
+.kpi .l{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.kpi .v{font-family:var(--mono);font-size:22px;font-weight:500;font-variant-numeric:tabular-nums;margin-top:2px;overflow-wrap:anywhere}
+.tablebox{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--rule);white-space:nowrap}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+td.num,th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+tr.co-row td{font-weight:600;background:color-mix(in srgb,var(--navy) 6%,transparent)}
+tr.cur-row td:first-child{padding-left:26px;font-family:var(--mono)}
+tr.grand td{font-weight:700;border-top:2px solid var(--navy);border-bottom:0}
+td.neg{color:var(--ink)}
+.log td:first-child{white-space:normal}
+.log td:last-child{text-align:right;font-family:var(--mono)}
+.log tr.sub td{color:var(--muted);font-size:13px}
+.log tr.final td{font-weight:700;border-top:2px solid var(--navy)}
+.tabs{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
+.tab{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--rule);border-radius:6px;font-size:14px;background:var(--sheet)}
+.sw{width:14px;height:14px;border-radius:3px;border:1px solid rgba(0,0,0,.15);flex:none}
+.tab .c{margin-left:auto;font-family:var(--mono)}
+.save{display:grid;gap:8px}
+.rules{margin:0;padding-left:22px;display:grid;gap:6px;font-size:14px}
+.rules li::marker{font-family:var(--mono);color:var(--navy)}
+.rules em{font-style:normal;font-family:var(--mono);font-size:13px;background:color-mix(in srgb,var(--navy) 8%,transparent);padding:0 4px;border-radius:3px}
+.legend{display:grid;gap:6px;font-size:14px}
+.legend div{display:flex;gap:10px;align-items:center}
+.busy{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite;vertical-align:-2px;margin-right:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.busy{animation:none}}
+</style>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>ACP Payment Run</h1>
+      <p class="sub">Turns the day's open vendor ledger entries into the payment proposal workbook.</p>
+    </div>
+    <div class="row"><div class="private">The file is processed in your browser and is not uploaded</div><button type="button" class="link" id="logout" hidden>Log out</button></div>
+  </header>
+
+  <div class="cols">
+    <div class="steps">
+      <section class="panel" aria-labelledby="h-file">
+        <h2 id="h-file"><span class="n">1</span>INPUT DATA file</h2>
+        <label class="drop" id="drop">
+          <input type="file" id="file" accept=".xlsx">
+          <strong>Choose the INPUT DATA .xlsx</strong>
+          <small>or drop it here, e.g. INPUT DATA ACP 9-10-2026.xlsx</small>
+        </label>
+        <div class="file" id="fileInfo" hidden><span id="fileName"></span><span id="fileRows"></span></div>
+        <p class="msg err" id="fileErr" hidden></p>
+      </section>
+
+      <section class="panel" aria-labelledby="h-date">
+        <h2 id="h-date"><span class="n">2</span>Run date</h2>
+        <label class="field" for="runDate">Today for this run
+          <input type="date" id="runDate">
+        </label>
+        <p class="hint">Credit lines due after <b id="cutoff">–</b> (run date + 7 days) are left out.</p>
+      </section>
+
+      <section class="panel" aria-labelledby="h-co">
+        <h2 id="h-co"><span class="n">3</span>Companies</h2>
+        <p class="empty" id="coEmpty">The companies in the file appear here once it is loaded.</p>
+        <div class="row" id="coTools" hidden>
+          <button type="button" class="link" id="coAll">Select all</button>
+          <button type="button" class="link" id="coNone">Clear</button>
+          <span class="hint" id="coCount"></span>
+        </div>
+        <div class="companies" id="companies"></div>
+      </section>
+
+      <button type="button" class="primary" id="runBtn" disabled>Run analysis</button>
+      <p class="msg err" id="runErr" hidden></p>
+    </div>
+
+    <div class="right">
+    <div class="result" id="atRest">
+      <section class="panel">
+        <h2>What the run does, in this order</h2>
+        <ol class="rules">
+          <li>Lines with a <em>closedAtDate</em> go to tab <b>Error</b> (red); the column is then dropped.</li>
+          <li>The <em>Applied filters</em> footer line and the columns <em>YourReference</em> and <em>DuePeriod</em> are removed.</li>
+          <li>Vendor <em>99999</em> Xpenditure and all lines with an <em>Interco</em> value are left out.</li>
+          <li>Same <em>externalDocumentNumber</em> (signs ignored) and amount within ±1 EUR: reported in <b>Poss Duplicat</b>, kept in Lines in red.</li>
+          <li>Lines that net to zero per company, vendor and currency, or +/- pairs of the same amount: <b>Is Zero</b> (green), with a total per vendor.</li>
+          <li>paymentMethod <em>DOM</em>, <em>DOMI</em>, <em>DOMICIL</em>, <em>CCARD</em>: tab <b>paymentMethod</b>.</li>
+          <li>Lines with an <em>onHold</em> code: tab <b>onHold</b> (yellow); that vendor's other lines turn light yellow in Lines.</li>
+          <li><em>Customer</em> lines: tab <b>Cust-Vend</b> (blue) with the same vendor's lines, which stay in Lines in light blue.</li>
+          <li>Credit lines due after run date + 7 days are dropped; debit lines stay with a yellow dueDate.</li>
+          <li>Vendors with a debit balance in EUR per company: tab <b>Total Debit</b>, with a total per vendor.</li>
+          <li>Lines is sorted by vendorNumber and dueDate, then tab <b>Currency</b> pivots it per company and currency.</li>
+        </ol>
+      </section>
+      <section class="panel">
+        <h2>Colours in tab Lines</h2>
+        <div class="legend">
+          <div><span class="sw" style="background:var(--sw-dup)"></span>Possible duplicate (whole row)</div>
+          <div><span class="sw" style="background:var(--sw-lblue)"></span>Vendor is also a customer, consider offsetting (whole row)</div>
+          <div><span class="sw" style="background:var(--sw-lyellow)"></span>Vendor had lines on hold (whole row)</div>
+          <div><span class="sw" style="background:var(--sw-yellow)"></span>documentNumber starts with ING, BNP, BGL, EUR or MISC; or a debit line due after the cut-off</div>
+          <div><span class="sw" style="background:var(--sw-orange)"></span>paymentMethod empty or CASH</div>
+        </div>
+      </section>
+    </div>
+
+    <div class="result" id="result" hidden>
+      <div class="kpis">
+        <div class="kpi"><div class="l">Lines to pay</div><div class="v" id="kLines"></div></div>
+        <div class="kpi"><div class="l">Total EUR</div><div class="v" id="kEur"></div></div>
+        <div class="kpi"><div class="l">Cut-off</div><div class="v" id="kCut"></div></div>
+      </div>
+
+      <section class="panel save">
+        <h2>Output workbook</h2>
+        <button type="button" class="primary" id="saveBtn">Download</button>
+        <p class="msg info" id="saveMsg" hidden></p>
+      </section>
+
+      <section class="panel">
+        <h2>Currency (per company, per currency)</h2>
+        <div class="tablebox"><table id="curTable"></table></div>
+      </section>
+
+      <section class="panel">
+        <h2>Review tabs</h2>
+        <div class="tabs" id="tabCounts"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Log</h2>
+        <div class="tablebox"><table class="log" id="logTable"></table></div>
+      </section>
+    </div>
+    </div>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+/* ACP Payment Run – core logic (runs in the browser; also testable in Node).
+   Needs globals ExcelJS and JSZip. */
+(function (root) {
+  "use strict";
+
+  var DOM_METHODS = ["DOM", "DOMI", "DOMICIL", "CCARD"];
+  var DOC_PREFIXES = ["ING", "BNP", "BGL", "EUR", "MISC"];
+  var EUR_TOL = 1.0;
+  var COLS = ["company", "postingDate", "DocumentDate", "dueDate", "vendorNumber", "vendorName",
+    "documentNumber", "currencyCode", "OriginalAmount", "RemainingAmount", "RemainingAmountEUR",
+    "externalDocumentNumber", "onHold", "Interco", "paymentMethod", "paymentReference", "ContactType"];
+  var DATE_COLS = { postingDate: 1, dueDate: 1, closedAtDate: 1 };
+  var AMT_COLS = { OriginalAmount: 1, RemainingAmount: 1, RemainingAmountEUR: 1 };
+  var AMT_FMT = "#,##0.00;[Red]-#,##0.00";
+
+  var C = {
+    RED: "FFC7CE", GREEN: "C6EFCE", YELLOW: "FFFF00", LYELLOW: "FFF2CC", LBLUE: "DDEBF7",
+    DUPRED: "FF9999", BLUE: "BDD7EE", ORANGE: "FFC000", HEAD: "1F3864"
+  };
+
+  // ---------- helpers ----------
+  function hasVal(v) {
+    if (v === null || v === undefined) return false;
+    if (typeof v === "number" && isNaN(v)) return false;
+    var s = String(v).trim();
+    return s !== "" && s.toLowerCase() !== "nan";
+  }
+  function r2(x) { return Math.round(x * 100) / 100; }
+  function num(v) { return (v === null || v === undefined || v === "") ? NaN : Number(v); }
+  function sign(x) { return x > 0 ? 1 : (x < 0 ? -1 : 0); }
+  function ymd(d) {
+    if (!(d instanceof Date) || isNaN(d)) return null;
+    return d.toISOString().slice(0, 10);
+  }
+  function dmy(s) { var p = s.split("-"); return +p[2] + "-" + +p[1] + "-" + p[0]; }
+  function addDays(isoDate, n) {
+    var d = new Date(isoDate + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return ymd(d);
+  }
+  function cellValue(v) {
+    if (v === null || v === undefined) return null;
+    if (v instanceof Date) return v;
+    if (typeof v === "object") {
+      if (v.richText) return v.richText.map(function (t) { return t.text; }).join("");
+      if ("result" in v) return v.result === undefined ? null : v.result;
+      if ("text" in v) return v.text;
+      if (v.error) return null;
+    }
+    return v;
+  }
+  function cmp(a, b) {
+    var an = a === null || a === undefined || (typeof a === "number" && isNaN(a));
+    var bn = b === null || b === undefined || (typeof b === "number" && isNaN(b));
+    if (an || bn) return an === bn ? 0 : (an ? 1 : -1); // nulls last
+    if (a instanceof Date) a = a.getTime();
+    if (b instanceof Date) b = b.getTime();
+    return a < b ? -1 : (a > b ? 1 : 0);
+  }
+  function sortBy(rows, keys) {
+    return rows.slice().sort(function (x, y) {
+      for (var k = 0; k < keys.length; k++) { var c = cmp(x[keys[k]], y[keys[k]]); if (c) return c; }
+      return 0;
+    });
+  }
+  function groupKey(r, keys) { return keys.map(function (k) { return String(r[k]); }).join("\u0001"); }
+  function normExt(x) {
+    if (!hasVal(x)) return "";
+    var s = String(x).toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/^0+/, "");
+    return s === "NAN" ? "" : s;
+  }
+
+  // ---------- read ----------
+  async function readInput(arrayBuffer) {
+    var wb = new root.ExcelJS.Workbook();
+    await wb.xlsx.load(arrayBuffer);
+    var ws = wb.worksheets[0];
+    var headers = [];
+    ws.getRow(1).eachCell({ includeEmpty: true }, function (cell, col) { headers[col] = String(cellValue(cell.value) || "").trim(); });
+    var rows = [];
+    for (var r = 2; r <= ws.rowCount; r++) {
+      var row = ws.getRow(r), o = { _id: r };
+      for (var c = 1; c < headers.length; c++) if (headers[c]) o[headers[c]] = cellValue(row.getCell(c).value);
+      rows.push(o);
+    }
+    var need = ["company", "dueDate", "closedAtDate", "vendorNumber", "RemainingAmount", "RemainingAmountEUR",
+      "onHold", "Interco", "paymentMethod", "ContactType", "externalDocumentNumber", "documentNumber"];
+    var missing = need.filter(function (h) { return headers.indexOf(h) < 0; });
+    var data = rows.filter(function (o) { return hasVal(o.company) && String(o.company).indexOf("Applied filters") !== 0; });
+    var companies = {};
+    data.forEach(function (o) { companies[o.company] = (companies[o.company] || 0) + 1; });
+    return { workbook: wb, sheet: ws, headers: headers, rows: rows, missing: missing, companies: companies };
+  }
+
+  // ---------- duplicates ----------
+  function findDuplicates(df) {
+    var parent = {};
+    function find(i) { if (!(i in parent)) parent[i] = i; while (parent[i] !== i) i = parent[i]; return i; }
+    var byId = {}; df.forEach(function (o) { byId[o._id] = o; });
+    var groups = {};
+    df.forEach(function (o) { var k = normExt(o.externalDocumentNumber); if (k) (groups[k] = groups[k] || []).push(o); });
+    var hits = {};
+    Object.keys(groups).sort().forEach(function (k) {
+      var g = groups[k];
+      for (var a = 0; a < g.length; a++) for (var b = a + 1; b < g.length; b++) {
+        var ea = r2(num(g[a].RemainingAmountEUR)), eb = r2(num(g[b].RemainingAmountEUR));
+        if (sign(ea) === sign(eb) && Math.abs(ea - eb) <= EUR_TOL + 1e-9) {
+          parent[find(g[a]._id)] = find(g[b]._id);
+          var diff = r2(Math.abs(ea - eb));
+          [g[a]._id, g[b]._id].forEach(function (id) { hits[id] = Math.max(hits[id] || 0, diff); });
+        }
+      }
+    });
+    var ids = Object.keys(hits).map(Number);
+    var roots = Array.from(new Set(ids.map(find))).sort(function (x, y) {
+      return cmp(num(byId[x].vendorNumber), num(byId[y].vendorNumber)) || (x - y);
+    });
+    var rootNo = {}; roots.forEach(function (r, i) { rootNo[r] = i + 1; });
+    var out = df.filter(function (o) { return o._id in hits; }).map(function (o) {
+      return Object.assign({}, o, {
+        dupGroup: rootNo[find(o._id)],
+        dupReason: "Same ext. doc no. + " + (hits[o._id] === 0 ? "same amount" : "amount diff " + hits[o._id].toFixed(2) + " EUR")
+      });
+    });
+    return { rows: sortBy(out, ["dupGroup", "dueDate"]), ids: new Set(ids) };
+  }
+
+  // ---------- pipeline ----------
+  function run(input, today, selected) {
+    var log = [], tabs = {};
+    var sel = new Set(selected);
+    log.push(["Input rows (incl. footer)", input.rows.length]);
+    var df = input.rows.filter(function (o) { return hasVal(o.company) && String(o.company).indexOf("Applied filters") !== 0; });
+    log.push(["Removed 'Applied filters' / blank footer lines", input.rows.length - df.length]);
+    var n0 = df.length;
+    df = df.filter(function (o) { return sel.has(o.company); });
+    log.push(["Removed lines of companies not selected", n0 - df.length]);
+
+    // 1 closedAtDate
+    tabs.Error = df.filter(function (o) { return hasVal(o.closedAtDate); });
+    df = df.filter(function (o) { return !hasVal(o.closedAtDate); });
+    log.push(["Error: closedAtDate filled (removed & reported)", tabs.Error.length]);
+
+    // 3 vendor 99999
+    n0 = df.length; df = df.filter(function (o) { return num(o.vendorNumber) !== 99999; });
+    log.push(["Removed vendor 99999 Xpenditure", n0 - df.length]);
+    // 4 Interco
+    n0 = df.length; df = df.filter(function (o) { return !hasVal(o.Interco); });
+    log.push(["Removed Interco lines", n0 - df.length]);
+
+    // 4b duplicates
+    var dup = findDuplicates(df);
+    tabs["Poss Duplicat"] = dup.rows;
+    log.push(["Poss Duplicat: possible duplicate lines (reported, kept in Lines)", dup.rows.length]);
+
+    // 5 Is Zero
+    var gk = ["company", "vendorNumber", "currencyCode"], sums = {}, groups = {}, order = [];
+    df.forEach(function (o) {
+      o._amt = r2(num(o.RemainingAmount));
+      var k = groupKey(o, gk);
+      if (!(k in sums)) { sums[k] = 0; groups[k] = []; order.push(k); }
+      sums[k] += o._amt; groups[k].push(o);
+    });
+    var zero = new Set();
+    order.forEach(function (k) {
+      if (r2(sums[k]) === 0) groups[k].forEach(function (o) { zero.add(o._id); o.matchType = "Vendor total = 0 in company"; });
+    });
+    order.forEach(function (k) {
+      if (r2(sums[k]) === 0) return;
+      var pos = new Map();
+      groups[k].forEach(function (o) { if (!pos.has(o._amt)) pos.set(o._amt, []); pos.get(o._amt).push(o); });
+      var used = new Set();
+      pos.forEach(function (list, a) {
+        if (a <= 0) return;
+        var negs = (pos.get(-a) || []).filter(function (o) { return !used.has(o._id); });
+        for (var i = 0; i < list.length; i++) {
+          if (!negs.length) break;
+          var j = negs.shift(); used.add(list[i]._id); used.add(j._id);
+        }
+      });
+      groups[k].forEach(function (o) { if (used.has(o._id)) { zero.add(o._id); o.matchType = "Offsetting pair (+/- same amount)"; } });
+    });
+    tabs["Is Zero"] = sortBy(df.filter(function (o) { return zero.has(o._id); }), ["company", "vendorNumber", "currencyCode", "RemainingAmount"]);
+    df = df.filter(function (o) { return !zero.has(o._id); });
+    log.push(["Is Zero: lines balancing to zero (removed & reported)", zero.size]);
+
+    // 6 paymentMethod
+    var isDom = function (o) { return DOM_METHODS.indexOf(String(o.paymentMethod == null ? "" : o.paymentMethod).trim().toUpperCase()) >= 0; };
+    tabs.paymentMethod = df.filter(isDom); df = df.filter(function (o) { return !isDom(o); });
+    log.push(["paymentMethod DOM/DOMI/DOMICIL/CCARD (removed & reported)", tabs.paymentMethod.length]);
+
+    // 7 onHold
+    tabs.onHold = df.filter(function (o) { return hasVal(o.onHold); });
+    var holdVendors = new Set(tabs.onHold.map(function (o) { return num(o.vendorNumber); }));
+    df = df.filter(function (o) { return !hasVal(o.onHold); });
+    log.push(["onHold (removed & reported)", tabs.onHold.length]);
+
+    // 8 Customer / Cust-Vend
+    var isCust = function (o) { return String(o.ContactType == null ? "" : o.ContactType).trim().toLowerCase() === "customer"; };
+    var custVendors = new Set(df.filter(isCust).map(function (o) { return num(o.vendorNumber); }));
+    var cv = df.filter(function (o) { return custVendors.has(num(o.vendorNumber)); }).map(function (o) {
+      return Object.assign({}, o, { status: isCust(o) ? "Customer - removed from Lines" : "Vendor - kept in Lines" });
+    });
+    tabs["Cust-Vend"] = sortBy(cv, ["vendorNumber", "company", "ContactType"]);
+    var nCust = df.filter(isCust).length;
+    df = df.filter(function (o) { return !isCust(o); });
+    log.push(["Cust-Vend: Customer lines removed from Lines (reported)", nCust]);
+    log.push(["  same-vendorNumber Vendor lines reported in Cust-Vend, kept in Lines", cv.length - nCust]);
+
+    // 9 due date
+    var limit = addDays(today, 7);
+    n0 = df.length;
+    df = df.filter(function (o) { var d = ymd(o.dueDate); return !(d && d > limit && !(num(o.RemainingAmount) > 0)); });
+    df.forEach(function (o) { var d = ymd(o.dueDate); o._due_hl = !!(d && d > limit && num(o.RemainingAmount) > 0); });
+    log.push(["Removed credit lines due after " + dmy(limit), n0 - df.length]);
+    log.push(["  kept debit lines due after that date (dueDate highlighted)", df.filter(function (o) { return o._due_hl; }).length]);
+
+    // 10 Total Debit (company + vendorNumber, EUR)
+    var tot = {};
+    df.forEach(function (o) { var k = groupKey(o, ["company", "vendorNumber"]); tot[k] = (tot[k] || 0) + num(o.RemainingAmountEUR); });
+    var isDebit = function (o) { return r2(tot[groupKey(o, ["company", "vendorNumber"])]) > 0; };
+    tabs["Total Debit"] = sortBy(df.filter(isDebit), ["company", "vendorNumber", "dueDate"]);
+    df = df.filter(function (o) { return !isDebit(o); });
+    log.push(["Total Debit: vendors with debit balance in total (removed & reported)", tabs["Total Debit"].length]);
+
+    // highlights + sort
+    df.forEach(function (o) {
+      o._dup_hl = dup.ids.has(o._id);
+      o._cust_hl = custVendors.has(num(o.vendorNumber));
+      o._hold_hl = holdVendors.has(num(o.vendorNumber));
+      var doc = String(o.documentNumber == null ? "" : o.documentNumber).toUpperCase();
+      o._doc_hl = DOC_PREFIXES.some(function (p) { return doc.indexOf(p) === 0; });
+      o._pm_hl = !hasVal(o.paymentMethod) || String(o.paymentMethod).trim().toUpperCase() === "CASH";
+    });
+    tabs.Lines = sortBy(df, ["vendorNumber", "dueDate"]);
+    log.push(["Lines to pay", tabs.Lines.length]);
+
+    // currency summary
+    var cur = {};
+    tabs.Lines.forEach(function (o) {
+      var c = o.company, k = o.currencyCode == null ? "" : String(o.currencyCode);
+      cur[c] = cur[c] || {}; cur[c][k] = cur[c][k] || [0, 0];
+      cur[c][k][0] += num(o.RemainingAmount) || 0; cur[c][k][1] += num(o.RemainingAmountEUR) || 0;
+    });
+    var summary = Object.keys(cur).sort().map(function (c) {
+      var lines = Object.keys(cur[c]).sort().map(function (k) { return { currency: k, amt: r2(cur[c][k][0]), eur: r2(cur[c][k][1]) }; });
+      return { company: c, lines: lines,
+        amt: r2(lines.reduce(function (s, l) { return s + l.amt; }, 0)),
+        eur: r2(lines.reduce(function (s, l) { return s + l.eur; }, 0)) };
+    });
+    return { tabs: tabs, log: log, limit: limit, summary: summary };
+  }
+
+  // ---------- write ----------
+  function fill(hex) { return { type: "pattern", pattern: "solid", fgColor: { argb: "FF" + hex } }; }
+  function colLetter(n) { var s = ""; while (n > 0) { var m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; }
+
+  function outVal(o, c) {
+    var v = o[c];
+    if (!hasVal(v) && !(v instanceof Date)) return null;
+    if (v instanceof Date) return isNaN(v) ? null : v;
+    if (c === "vendorNumber") return Math.round(Number(v));
+    return v;
+  }
+
+  function writeTab(wb, name, rows, opt) {
+    opt = opt || {};
+    var ws = wb.addWorksheet(name, {
+      properties: opt.tab ? { tabColor: { argb: "FF" + opt.tab } } : {},
+      views: [{ state: "frozen", ySplit: 1 }]
+    });
+    var cols = (opt.cols || COLS).concat(opt.extra || []);
+    var widths = { dupReason: 40, status: 30, vendorName: 34, documentNumber: 18, externalDocumentNumber: 22, matchType: 32 };
+    ws.columns = cols.map(function (c) { return { width: widths[c] || Math.max(11, c.length + 3) }; });
+    var hr = ws.getRow(1);
+    cols.forEach(function (c, j) {
+      var cell = hr.getCell(j + 1); cell.value = c; cell.fill = fill(C.HEAD);
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    });
+    var r = 2, gstart = 2;
+    rows.forEach(function (o, n) {
+      var row = ws.getRow(r);
+      cols.forEach(function (c, j) {
+        var cell = row.getCell(j + 1);
+        var v = (opt.coerce && opt.coerce[c]) ? opt.coerce[c](outVal(o, c)) : outVal(o, c);
+        cell.value = v;
+        if (DATE_COLS[c]) cell.numFmt = "dd/mm/yyyy";
+        else if (AMT_COLS[c]) cell.numFmt = AMT_FMT;
+        var f = opt.fill ? opt.fill(o, c) : null;
+        if (f) cell.fill = fill(f);
+      });
+      r++;
+      if (opt.group) {
+        var next = rows[n + 1];
+        if (!next || groupKey(next, opt.group) !== groupKey(o, opt.group)) {
+          var tr = ws.getRow(r);
+          cols.forEach(function (c, j) {
+            var cell = tr.getCell(j + 1);
+            cell.font = { bold: true };
+            cell.border = { top: { style: "thin" }, bottom: { style: "double" } };
+            if (c === "company") cell.value = o.company;
+            else if (c === "vendorNumber") cell.value = Math.round(Number(o.vendorNumber));
+            else if (c === "vendorName") cell.value = "▶ Vendor total - " + (o.vendorName || "");
+            else if (c === "RemainingAmount" || c === "RemainingAmountEUR") {
+              var L = colLetter(j + 1), s = 0;
+              for (var q = n; q >= 0 && groupKey(rows[q], opt.group) === groupKey(o, opt.group); q--) s += num(rows[q][c]) || 0;
+              cell.value = { formula: "ROUND(SUM(" + L + gstart + ":" + L + (r - 1) + "),2)", result: r2(s) };
+              cell.numFmt = AMT_FMT;
+            }
+          });
+          r += 2; gstart = r;
+        }
+      }
+    });
+    if (!rows.length && opt.note) {
+      var nc = ws.getCell(2, 1); nc.value = opt.note; nc.font = { italic: true, color: { argb: "FF808080" } };
+    }
+    ws.autoFilter = "A1:" + colLetter(cols.length) + Math.max(r - 1, 1);
+    return ws;
+  }
+
+  function xmlEsc(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
+  }
+  function isoD(d) { return d.toISOString().slice(0, 19); }
+
+  // Native Excel pivot table (company > currencyCode; Sum RemainingAmount / RemainingAmountEUR)
+  function pivotParts(lineVals, summary) {
+    var nRec = lineVals.length;
+    var compItems = summary.map(function (s) { return s.company; });
+    var curItems = Array.from(new Set(lineVals.map(function (v) { return v[COLS.indexOf("currencyCode")]; }))).map(String).sort();
+    var fields = COLS.map(function (name, j) {
+      var vals = lineVals.map(function (v) { return v[j]; });
+      var f = { name: name, kind: "inline", blank: false };
+      if (name === "company") { f.kind = "shared"; f.items = compItems; return f; }
+      if (name === "currencyCode") { f.kind = "shared"; f.items = curItems; return f; }
+      var t = { s: 0, n: 0, d: 0, b: 0 }, min = Infinity, max = -Infinity, ints = true, dmin = null, dmax = null;
+      vals.forEach(function (v) {
+        if (v === null || v === undefined) t.b++;
+        else if (v instanceof Date) { t.d++; if (!dmin || v < dmin) dmin = v; if (!dmax || v > dmax) dmax = v; }
+        else if (typeof v === "number") { t.n++; min = Math.min(min, v); max = Math.max(max, v); if (v % 1) ints = false; }
+        else t.s++;
+      });
+      var a = [];
+      if (t.n && !t.s && !t.d) {
+        if (!t.b) a.push('containsSemiMixedTypes="0"');
+        a.push('containsString="0"'); if (t.b) a.push('containsBlank="1"');
+        a.push('containsNumber="1"'); if (ints) a.push('containsInteger="1"');
+        a.push('minValue="' + min + '" maxValue="' + max + '"');
+      } else if (t.d && !t.s && !t.n) {
+        if (!t.b) a.push('containsSemiMixedTypes="0"');
+        a.push('containsNonDate="0" containsDate="1" containsString="0"'); if (t.b) a.push('containsBlank="1"');
+        a.push('minDate="' + isoD(dmin) + '" maxDate="' + isoD(dmax) + '"');
+      } else if (!t.s && !t.n && !t.d) {
+        a.push('containsString="0" containsBlank="1"');
+      } else if (t.b) a.push('containsBlank="1"');
+      f.attrs = a.join(" ");
+      return f;
+    });
+    var cache = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<pivotCacheDefinition xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId1" refreshOnLoad="1" createdVersion="6" refreshedVersion="6" minRefreshableVersion="3" recordCount="' + nRec + '">' +
+      '<cacheSource type="worksheet"><worksheetSource ref="A1:' + colLetter(COLS.length) + (nRec + 1) + '" sheet="Lines"/></cacheSource><cacheFields count="' + COLS.length + '">' +
+      fields.map(function (f) {
+        var nf = DATE_COLS[f.name] ? 14 : (AMT_COLS[f.name] ? 4 : 0);
+        if (f.kind === "shared") return '<cacheField name="' + f.name + '" numFmtId="0"><sharedItems count="' + f.items.length + '">' + f.items.map(function (s) { return '<s v="' + xmlEsc(s) + '"/>'; }).join("") + '</sharedItems></cacheField>';
+        return '<cacheField name="' + f.name + '" numFmtId="' + nf + '"><sharedItems' + (f.attrs ? " " + f.attrs : "") + '/></cacheField>';
+      }).join("") + '</cacheFields></pivotCacheDefinition>';
+    var recs = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<pivotCacheRecords xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" count="' + nRec + '">'];
+    lineVals.forEach(function (v) {
+      var s = "<r>";
+      fields.forEach(function (f, j) {
+        var x = v[j];
+        if (f.kind === "shared") s += '<x v="' + f.items.indexOf(String(x)) + '"/>';
+        else if (x === null || x === undefined) s += "<m/>";
+        else if (x instanceof Date) s += '<d v="' + isoD(x) + '"/>';
+        else if (typeof x === "number") s += '<n v="' + x + '"/>';
+        else s += '<s v="' + xmlEsc(x) + '"/>';
+      });
+      recs.push(s + "</r>");
+    });
+    recs.push("</pivotCacheRecords>");
+    var ci = COLS.indexOf("company"), ki = COLS.indexOf("currencyCode");
+    var rowItems = [];
+    summary.forEach(function (s, i) {
+      rowItems.push(i ? '<i><x v="' + i + '"/></i>' : "<i><x/></i>");
+      s.lines.forEach(function (l) { var x = curItems.indexOf(l.currency); rowItems.push('<i r="1">' + (x ? '<x v="' + x + '"/>' : "<x/>") + "</i>"); });
+    });
+    rowItems.push('<i t="grand"><x/></i>');
+    var pf = COLS.map(function (name, j) {
+      var nf = DATE_COLS[name] ? ' numFmtId="14"' : (AMT_COLS[name] ? ' numFmtId="4"' : "");
+      if (j === ci || j === ki) {
+        var items = (j === ci ? compItems : curItems);
+        return '<pivotField axis="axisRow" showAll="0"><items count="' + (items.length + 1) + '">' + items.map(function (_, x) { return '<item x="' + x + '"/>'; }).join("") + '<item t="default"/></items></pivotField>';
+      }
+      if (name === "RemainingAmount" || name === "RemainingAmountEUR") return '<pivotField dataField="1"' + nf + ' showAll="0"/>';
+      return "<pivotField" + nf + ' showAll="0"/>';
+    }).join("");
+    var lastRow = 3 + rowItems.length;
+    var table = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<pivotTableDefinition xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" name="CurrencyPivot" cacheId="1" applyNumberFormats="0" applyBorderFormats="0" applyFontFormats="0" applyPatternFormats="0" applyAlignmentFormats="0" applyWidthHeightFormats="1" dataCaption="Values" updatedVersion="6" minRefreshableVersion="3" useAutoFormatting="1" itemPrintTitles="1" createdVersion="6" indent="0" outline="1" outlineData="1" multipleFieldFilters="0">' +
+      '<location ref="A3:C' + lastRow + '" firstHeaderRow="0" firstDataRow="1" firstDataCol="1"/>' +
+      '<pivotFields count="' + COLS.length + '">' + pf + '</pivotFields>' +
+      '<rowFields count="2"><field x="' + ci + '"/><field x="' + ki + '"/></rowFields>' +
+      '<rowItems count="' + rowItems.length + '">' + rowItems.join("") + '</rowItems>' +
+      '<colFields count="1"><field x="-2"/></colFields><colItems count="2"><i><x/></i><i i="1"><x v="1"/></i></colItems>' +
+      '<dataFields count="2"><dataField name="Sum of RemainingAmount" fld="' + COLS.indexOf("RemainingAmount") + '" baseField="0" baseItem="0" numFmtId="4"/><dataField name="Sum of RemainingAmountEUR" fld="' + COLS.indexOf("RemainingAmountEUR") + '" baseField="0" baseItem="0" numFmtId="4"/></dataFields>' +
+      '<pivotTableStyleInfo name="PivotStyleLight16" showRowHeaders="1" showColHeaders="1" showRowStripes="0" showColStripes="0" showLastColumn="1"/></pivotTableDefinition>';
+    return { cache: cache, records: recs.join(""), table: table };
+  }
+
+  async function injectPivot(buffer, sheetName, parts) {
+    var zip = await root.JSZip.loadAsync(buffer);
+    var wbXml = await zip.file("xl/workbook.xml").async("string");
+    var relsXml = await zip.file("xl/_rels/workbook.xml.rels").async("string");
+    var m = new RegExp('<sheet [^>]*name="' + sheetName + '"[^>]*r:id="(rId\\d+)"').exec(wbXml);
+    var rid = m[1];
+    var target = new RegExp('Id="' + rid + '"[^>]*Target="([^"]+)"').exec(relsXml) || new RegExp('Target="([^"]+)"[^>]*Id="' + rid + '"').exec(relsXml);
+    var sheetPath = "xl/" + target[1].replace(/^\/?xl\//, "");
+    var sheetFile = sheetPath.split("/").pop();
+    zip.file("xl/pivotCache/pivotCacheDefinition1.xml", parts.cache);
+    zip.file("xl/pivotCache/pivotCacheRecords1.xml", parts.records);
+    zip.file("xl/pivotCache/_rels/pivotCacheDefinition1.xml.rels", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheRecords" Target="pivotCacheRecords1.xml"/></Relationships>');
+    zip.file("xl/pivotTables/pivotTable1.xml", parts.table);
+    zip.file("xl/pivotTables/_rels/pivotTable1.xml.rels", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition" Target="../pivotCache/pivotCacheDefinition1.xml"/></Relationships>');
+    var sheetRelsPath = "xl/worksheets/_rels/" + sheetFile + ".rels";
+    var pivRel = '<Relationship Id="rIdPivot1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable" Target="../pivotTables/pivotTable1.xml"/>';
+    if (zip.file(sheetRelsPath)) {
+      var sr = await zip.file(sheetRelsPath).async("string");
+      zip.file(sheetRelsPath, sr.replace("</Relationships>", pivRel + "</Relationships>"));
+    } else {
+      zip.file(sheetRelsPath, '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + pivRel + "</Relationships>");
+    }
+    zip.file("xl/_rels/workbook.xml.rels", relsXml.replace("</Relationships>",
+      '<Relationship Id="rIdPivotCache1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition" Target="pivotCache/pivotCacheDefinition1.xml"/></Relationships>'));
+    var pc = '<pivotCaches><pivotCache cacheId="1" r:id="rIdPivotCache1"/></pivotCaches>';
+    wbXml = wbXml.indexOf("<extLst") >= 0 ? wbXml.replace("<extLst", pc + "<extLst") : wbXml.replace("</workbook>", pc + "</workbook>");
+    zip.file("xl/workbook.xml", wbXml);
+    var ct = await zip.file("[Content_Types].xml").async("string");
+    ct = ct.replace("</Types>",
+      '<Override PartName="/xl/pivotCache/pivotCacheDefinition1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheDefinition+xml"/>' +
+      '<Override PartName="/xl/pivotCache/pivotCacheRecords1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheRecords+xml"/>' +
+      '<Override PartName="/xl/pivotTables/pivotTable1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.pivotTable+xml"/></Types>');
+    zip.file("[Content_Types].xml", ct);
+    return zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
+  }
+
+  async function buildWorkbook(input, result, meta) {
+    var T = result.tabs, wb = new root.ExcelJS.Workbook();
+    wb.calcProperties = { fullCalcOnLoad: true };
+
+    // Lines: make every column a single type so the pivot cache stays consistent
+    var coerce = {};
+    COLS.forEach(function (c) {
+      if (DATE_COLS[c] || AMT_COLS[c] || c === "vendorNumber") return;
+      var hasNum = T.Lines.some(function (o) { return typeof outVal(o, c) === "number"; });
+      var hasStr = T.Lines.some(function (o) { return typeof outVal(o, c) === "string"; });
+      var hasDate = T.Lines.some(function (o) { return outVal(o, c) instanceof Date; });
+      if ((hasNum && hasStr) || (hasDate && (hasNum || hasStr))) coerce[c] = function (v) { return v === null ? null : (v instanceof Date ? ymd(v) : String(v)); };
+    });
+    COLS.forEach(function (c) {
+      if (!DATE_COLS[c]) return;
+      if (T.Lines.some(function (o) { var v = outVal(o, c); return v !== null && !(v instanceof Date); }))
+        coerce[c] = function (v) { return v === null ? null : (v instanceof Date ? v : String(v)); };
+    });
+    writeTab(wb, "Lines", T.Lines, {
+      tab: C.HEAD, coerce: coerce,
+      fill: function (o, c) {
+        if (c === "dueDate" && o._due_hl) return C.YELLOW;
+        if (c === "documentNumber" && o._doc_hl) return C.YELLOW;
+        if (c === "paymentMethod" && o._pm_hl) return C.ORANGE;
+        if (o._dup_hl) return C.DUPRED;
+        if (o._cust_hl) return C.LBLUE;
+        if (o._hold_hl) return C.LYELLOW;
+        return null;
+      }
+    });
+
+    // Currency (pivot layout values; the pivot definition is injected afterwards)
+    var cs = wb.addWorksheet("Currency", { properties: { tabColor: { argb: "FF" + C.HEAD } } });
+    cs.columns = [{ width: 22 }, { width: 26 }, { width: 28 }];
+    cs.getCell("A1").value = "Overview per company / currency (pivot table on tab Lines)";
+    cs.getCell("A1").font = { bold: true };
+    cs.getCell("A3").value = "Row Labels"; cs.getCell("B3").value = "Sum of RemainingAmount"; cs.getCell("C3").value = "Sum of RemainingAmountEUR";
+    ["A3", "B3", "C3"].forEach(function (a) { cs.getCell(a).font = { bold: true }; });
+    var rr = 4, ga = 0, ge = 0;
+    result.summary.forEach(function (s) {
+      cs.getCell(rr, 1).value = s.company; cs.getCell(rr, 2).value = s.amt; cs.getCell(rr, 3).value = s.eur;
+      [1, 2, 3].forEach(function (k) { cs.getCell(rr, k).font = { bold: true }; });
+      rr++;
+      s.lines.forEach(function (l) {
+        cs.getCell(rr, 1).value = l.currency; cs.getCell(rr, 1).alignment = { indent: 1 };
+        cs.getCell(rr, 2).value = l.amt; cs.getCell(rr, 3).value = l.eur; rr++;
+      });
+      ga += s.amt; ge += s.eur;
+    });
+    cs.getCell(rr, 1).value = "Grand Total"; cs.getCell(rr, 2).value = r2(ga); cs.getCell(rr, 3).value = r2(ge);
+    [1, 2, 3].forEach(function (k) { cs.getCell(rr, k).font = { bold: true }; });
+    for (var q = 4; q <= rr; q++) { cs.getCell(q, 2).numFmt = "#,##0.00"; cs.getCell(q, 3).numFmt = "#,##0.00"; }
+
+    writeTab(wb, "Error", T.Error, { tab: "FF0000", cols: COLS.slice(0, 4).concat(["closedAtDate"], COLS.slice(4)),
+      fill: function () { return C.RED; }, note: "No lines with a closedAtDate value - OK" });
+    writeTab(wb, "Poss Duplicat", T["Poss Duplicat"], { tab: "C00000", extra: ["dupGroup", "dupReason"], fill: function () { return C.DUPRED; } });
+    writeTab(wb, "Is Zero", T["Is Zero"], { tab: "00B050", extra: ["matchType"], fill: function () { return C.GREEN; }, group: ["company", "vendorNumber"] });
+    writeTab(wb, "paymentMethod", T.paymentMethod, {});
+    writeTab(wb, "onHold", T.onHold, { tab: "FFFF00", fill: function () { return C.YELLOW; } });
+    writeTab(wb, "Cust-Vend", T["Cust-Vend"], { tab: "5B9BD5", extra: ["status"], fill: function () { return C.BLUE; } });
+    writeTab(wb, "Total Debit", T["Total Debit"], { tab: "7F7F7F", group: ["company", "vendorNumber"] });
+
+    // Log
+    var lg = wb.addWorksheet("Log");
+    lg.columns = [{ width: 70 }, { width: 14 }];
+    lg.getCell("A1").value = "ACP Payment Run - " + dmy(meta.today); lg.getCell("A1").font = { bold: true, size: 14 };
+    lg.getCell("A2").value = "Source: " + meta.fileName + "   |   Due-date cut-off (today + 7): " + dmy(result.limit);
+    lg.getCell("A3").value = "Companies: " + meta.companies.join(", ");
+    var i = 5;
+    result.log.forEach(function (l) { lg.getCell(i, 1).value = l[0]; lg.getCell(i, 2).value = l[1]; i++; });
+    i += 1; lg.getCell(i, 1).value = "Legend - Tab Lines"; lg.getCell(i, 1).font = { bold: true };
+    [["dueDate > cut-off on a debit line (kept)", C.YELLOW],
+     ["documentNumber starts with ING/BNP/BGL/EUR/MISC", C.YELLOW],
+     ["paymentMethod empty or CASH", C.ORANGE],
+     ["Vendor had onHold lines removed (whole row, light yellow)", C.LYELLOW],
+     ["Vendor is also a customer - consider offsetting, see Cust-Vend (whole row, light blue; takes priority over light yellow)", C.LBLUE],
+     ["Possible duplicate, see Poss Duplicat (whole row, red; takes priority over light blue / light yellow)", C.DUPRED]
+    ].forEach(function (l) { i++; lg.getCell(i, 1).value = l[0]; lg.getCell(i, 2).fill = fill(l[1]); });
+
+    // INPUT DATA (original, untouched)
+    var src = input.sheet, inp = wb.addWorksheet("INPUT DATA", { views: [{ state: "frozen", ySplit: 1 }] });
+    src.columns && src.columns.forEach(function (col, k) { if (col && col.width) inp.getColumn(k + 1).width = col.width; });
+    src.eachRow({ includeEmpty: false }, function (row, rn) {
+      var nr = inp.getRow(rn);
+      row.eachCell({ includeEmpty: false }, function (cell, cn) {
+        var t = nr.getCell(cn); t.value = cell.value;
+        if (cell.numFmt) t.numFmt = cell.numFmt;
+      });
+    });
+
+    var buf = await wb.xlsx.writeBuffer();
+    // pivot: values exactly as written in Lines
+    var lineVals = T.Lines.map(function (o) {
+      return COLS.map(function (c) { return coerce[c] ? coerce[c](outVal(o, c)) : outVal(o, c); });
+    });
+    if (!lineVals.length) return new Uint8Array(buf);
+    return injectPivot(buf, "Currency", pivotParts(lineVals, result.summary));
+  }
+
+  root.ACP = { readInput: readInput, run: run, buildWorkbook: buildWorkbook, dmy: dmy, addDays: addDays };
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var state = { input: null, fileName: "", result: null, bytes: null, outName: "" };
+  var nf = new Intl.NumberFormat("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  var downloadsP = (window.claude && window.claude.use) ? window.claude.use("downloads") : Promise.resolve(null);
+
+  function localToday() {
+    var d = new Date(); var m = d.getMonth() + 1, day = d.getDate();
+    return d.getFullYear() + "-" + (m < 10 ? "0" : "") + m + "-" + (day < 10 ? "0" : "") + day;
+  }
+  function dateFromName(name) {
+    var m = /(\d{1,2})-(\d{1,2})-(\d{4})/.exec(name);
+    if (!m) return null;
+    var d = +m[1], mo = +m[2], y = +m[3];
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+    return y + "-" + (mo < 10 ? "0" : "") + mo + "-" + (d < 10 ? "0" : "") + d;
+  }
+  function show(el, on) { el.hidden = !on; }
+  function setErr(el, text) { el.textContent = text || ""; show(el, !!text); }
+
+  function updateCutoff() {
+    var v = $("runDate").value;
+    $("cutoff").textContent = v ? ACP.dmy(ACP.addDays(v, 7)) : "–";
+  }
+  function selected() {
+    return Array.prototype.slice.call(document.querySelectorAll("#companies input:checked")).map(function (i) { return i.value; });
+  }
+  function refreshRun() {
+    var n = selected().length, total = document.querySelectorAll("#companies input").length;
+    $("coCount").textContent = total ? n + " of " + total + " selected" : "";
+    $("runBtn").disabled = !(state.input && n && $("runDate").value);
+  }
+  function invalidate() {
+    if (state.result) { show($("result"), false); show($("atRest"), true); state.result = null; state.bytes = null; }
+  }
+
+  async function loadFile(file) {
+    setErr($("fileErr"), ""); setErr($("runErr"), ""); invalidate();
+    if (!/\.xlsx$/i.test(file.name)) { setErr($("fileErr"), "This is not an .xlsx file. Export the vendor ledger entries to Excel (.xlsx) and choose that file."); return; }
+    $("fileName").textContent = file.name; $("fileRows").textContent = "reading…"; show($("fileInfo"), true);
+    try {
+      if (!window.ExcelJS || !window.JSZip) throw new Error("The Excel library did not load. Reload the page and try again.");
+      var input = await ACP.readInput(await file.arrayBuffer());
+      if (input.missing.length) {
+        show($("fileInfo"), false);
+        setErr($("fileErr"), "The first sheet is missing these columns: " + input.missing.join(", ") + ". Check that this is the INPUT DATA export.");
+        return;
+      }
+      state.input = input; state.fileName = file.name;
+      var n = Object.keys(input.companies).reduce(function (s, k) { return s + input.companies[k]; }, 0);
+      $("fileRows").textContent = n.toLocaleString("en-GB") + " lines";
+      var d = dateFromName(file.name);
+      if (d) $("runDate").value = d;
+      updateCutoff();
+      renderCompanies(input.companies);
+    } catch (e) {
+      show($("fileInfo"), false);
+      setErr($("fileErr"), "The file could not be read (" + (e && e.message ? e.message : e) + ").");
+    }
+  }
+
+  function renderCompanies(map) {
+    var box = $("companies"); box.textContent = "";
+    Object.keys(map).sort().forEach(function (c) {
+      var id = "co-" + c.replace(/[^A-Za-z0-9_-]/g, "_");
+      var lab = document.createElement("label"); lab.className = "co"; lab.htmlFor = id;
+      var cb = document.createElement("input"); cb.type = "checkbox"; cb.id = id; cb.value = c; cb.checked = true;
+      cb.addEventListener("change", function () { invalidate(); refreshRun(); });
+      var b = document.createElement("b"); b.textContent = c;
+      var s = document.createElement("span"); s.textContent = map[c];
+      lab.append(cb, b, s); box.appendChild(lab);
+    });
+    show($("coEmpty"), false); show($("coTools"), true); refreshRun();
+  }
+
+  async function runAnalysis() {
+    setErr($("runErr"), "");
+    var btn = $("runBtn"); btn.disabled = true; btn.innerHTML = '<span class="busy"></span>Running…';
+    await new Promise(function (r) { setTimeout(r, 30); });
+    try {
+      var today = $("runDate").value, cos = selected();
+      var res = ACP.run(state.input, today, cos);
+      var bytes = await ACP.buildWorkbook(state.input, res, { today: today, fileName: state.fileName, companies: cos });
+      state.result = res; state.bytes = bytes;
+      state.outName = "ACP Payment Run " + ACP.dmy(today) + (cos.length < Object.keys(state.input.companies).length ? " " + cos.join("-") : "") + ".xlsx";
+      renderResult(res, today);
+    } catch (e) {
+      setErr($("runErr"), "The run stopped: " + (e && e.message ? e.message : e));
+    } finally {
+      btn.textContent = "Run analysis"; refreshRun();
+    }
+  }
+
+  function td(text, cls) { var c = document.createElement("td"); c.textContent = text; if (cls) c.className = cls; return c; }
+  function th(text, cls) { var c = document.createElement("th"); c.textContent = text; if (cls) c.className = cls; return c; }
+
+  function renderResult(res, today) {
+    var L = res.tabs.Lines, eur = res.summary.reduce(function (s, x) { return s + x.eur; }, 0);
+    $("kLines").textContent = L.length.toLocaleString("en-GB");
+    $("kEur").textContent = nf.format(eur);
+    $("kCut").textContent = ACP.dmy(res.limit);
+    $("saveBtn").textContent = "Download " + state.outName;
+    show($("saveMsg"), false);
+
+    var t = $("curTable"); t.textContent = "";
+    var hr = document.createElement("tr"); hr.append(th("Company / currency"), th("RemainingAmount", "num"), th("RemainingAmountEUR", "num"));
+    var thead = document.createElement("thead"); thead.appendChild(hr); t.appendChild(thead);
+    var tb = document.createElement("tbody");
+    var ga = 0, ge = 0;
+    res.summary.forEach(function (s) {
+      var r = document.createElement("tr"); r.className = "co-row";
+      r.append(td(s.company), td(nf.format(s.amt), "num"), td(nf.format(s.eur), "num")); tb.appendChild(r);
+      s.lines.forEach(function (l) {
+        var q = document.createElement("tr"); q.className = "cur-row";
+        q.append(td(l.currency), td(nf.format(l.amt), "num"), td(nf.format(l.eur), "num")); tb.appendChild(q);
+      });
+      ga += s.amt; ge += s.eur;
+    });
+    var g = document.createElement("tr"); g.className = "grand";
+    g.append(td("Grand Total"), td(nf.format(ga), "num"), td(nf.format(ge), "num")); tb.appendChild(g);
+    if (!res.summary.length) { var e = document.createElement("tr"); e.appendChild(td("No lines to pay for this selection.")); tb.prepend(e); }
+    t.appendChild(tb);
+
+    var tabs = [["Error", "--sw-red"], ["Poss Duplicat", "--sw-dup"], ["Is Zero", "--sw-green"], ["paymentMethod", "--sw-grey"],
+      ["onHold", "--sw-yellow"], ["Cust-Vend", "--sw-blue"], ["Total Debit", "--sw-grey"]];
+    var tc = $("tabCounts"); tc.textContent = "";
+    tabs.forEach(function (x) {
+      var d = document.createElement("div"); d.className = "tab";
+      var sw = document.createElement("span"); sw.className = "sw"; sw.style.background = "var(" + x[1] + ")";
+      var n = document.createElement("span"); n.textContent = x[0];
+      var c = document.createElement("span"); c.className = "c"; c.textContent = res.tabs[x[0]].length;
+      d.append(sw, n, c); tc.appendChild(d);
+    });
+
+    var lt = $("logTable"); lt.textContent = "";
+    var lb = document.createElement("tbody");
+    res.log.forEach(function (l, i) {
+      var r = document.createElement("tr");
+      if (/^\s/.test(l[0])) r.className = "sub";
+      if (i === res.log.length - 1) r.className = "final";
+      r.append(td(l[0].trim()), td(String(l[1]))); lb.appendChild(r);
+    });
+    lt.appendChild(lb);
+
+    show($("atRest"), false); show($("result"), true);
+  }
+
+  function browserDownload(name, bytes) {
+    var url = URL.createObjectURL(new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+    var a = document.createElement("a"); a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+  }
+
+  async function save() {
+    var msg = $("saveMsg"); show(msg, false);
+    var dl = await downloadsP;
+    if (!dl) { // standalone page (e.g. GitHub Pages): normal browser download
+      browserDownload(state.outName, state.bytes);
+      msg.textContent = "Downloaded " + state.outName + ". Check your Downloads folder."; show(msg, true);
+      return;
+    }
+    try {
+      await dl.save({ filename: state.outName, data: new Blob([state.bytes]) });
+      msg.textContent = "Saved " + state.outName + "."; show(msg, true);
+    } catch (e) {
+      var code = e && e.code;
+      msg.textContent = code === "declined" ? "Download cancelled." :
+        code === "rate_limited" ? "A save prompt is already open. Finish that one first." :
+        "The download did not work here (" + (code || "unknown") + ").";
+      show(msg, true);
+    }
+  }
+
+  // wiring
+  $("runDate").value = localToday(); updateCutoff();
+  $("runDate").addEventListener("change", function () { updateCutoff(); invalidate(); refreshRun(); });
+  $("file").addEventListener("change", function (e) { if (e.target.files[0]) loadFile(e.target.files[0]); e.target.value = ""; });
+  var drop = $("drop");
+  ["dragenter", "dragover"].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add("over"); }); });
+  ["dragleave", "drop"].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove("over"); }); });
+  drop.addEventListener("drop", function (e) { var f = e.dataTransfer.files[0]; if (f) loadFile(f); });
+  $("coAll").addEventListener("click", function () { document.querySelectorAll("#companies input").forEach(function (i) { i.checked = true; }); invalidate(); refreshRun(); });
+  $("coNone").addEventListener("click", function () { document.querySelectorAll("#companies input").forEach(function (i) { i.checked = false; }); invalidate(); refreshRun(); });
+  $("runBtn").addEventListener("click", runAnalysis);
+  $("saveBtn").addEventListener("click", save);
+  var lo = $("logout");
+  if (lo) {
+    if (window.ACP_LOGOUT) { lo.hidden = false; lo.addEventListener("click", window.ACP_LOGOUT); }
+  }
+})();
+
+</script>
+</body>
+</html>
